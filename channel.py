@@ -2,7 +2,7 @@ import numpy as np
 from constellations import labels_to_symbols, get_constellation_size
 
 def snr_db_to_noise_variance(snr_db: float) -> float:
-    snr_linear = 10 ** (snr_db / 10/0)
+    snr_linear = 10 ** (snr_db / 10.0)
     return 1.0 / snr_linear
 
 
@@ -22,7 +22,8 @@ def sample_complex_gaussian_noise(num_samples: int,
     return real + 1j * imag
 
 
-def generate_block(block_length: int, 
+def generate_block(block_length: int,
+                    pilot_length: int, 
                     modulation_name: str, 
                     snr_db: float) -> dict:
  
@@ -30,9 +31,14 @@ def generate_block(block_length: int,
     block = {}
 
     constellation_size = get_constellation_size(modulation_name)
-    transmitted_labels = r.integers(low=0,
-                                    high=constellation_size,
-                                    size=block_length)
+    pilot = r.integers(low=0,
+                       high=constellation_size,
+                       size=pilot_length)
+    pilot_symbols = labels_to_symbols(pilot, modulation_name)
+    data = r.integers(low=0,
+                        high=constellation_size,
+                        size=block_length-pilot_length)
+    transmitted_labels = np.concatenate([pilot, data], axis=0)
     transmitted_symbols = labels_to_symbols(transmitted_labels, modulation_name)
     channel_coefficient = sample_rayleigh_channel(r)
     noise_variance = snr_db_to_noise_variance(snr_db)
@@ -41,6 +47,8 @@ def generate_block(block_length: int,
     received_symbols = channel_coefficient * transmitted_symbols + noise_samples
 
     block = {
+        "pilot_labels": pilot,
+        "pilot_symbols": pilot_symbols,
         "transmitted_labels": transmitted_labels,
         "transmitted_symbols": transmitted_symbols,
         "received_symbols": received_symbols,
@@ -52,11 +60,14 @@ def generate_block(block_length: int,
     
 def generate_dataset(num_blocks: int, 
                     block_length: int,
+                    pilot_length: int,
                     modulation_name: str,
                     snr_db: float) -> dict:
     
     dataset = {}
 
+    pilot = []
+    pilot_symbols = []
     transmitted_labels = []
     transmitted_symbols = []
     received_symbols = []
@@ -64,8 +75,10 @@ def generate_dataset(num_blocks: int,
     noise_variances = []
 
     for b in range(num_blocks):
-        block_data = generate_block(block_length, modulation_name, snr_db)
+        block_data = generate_block(block_length, pilot_length, modulation_name, snr_db)
 
+        pilot.append(block_data["pilot"])
+        pilot_symbols.append(block_data["pilot_symbols"])
         transmitted_labels.append(block_data["transmitted_labels"])
         transmitted_symbols.append(block_data["transmitted_symbols"])
         received_symbols.append(block_data["received_symbols"])
@@ -73,6 +86,8 @@ def generate_dataset(num_blocks: int,
         noise_variances.append(block_data["noise_variance"])
 
     dataset = {
+        "pilot": np.stack(pilot, axis=0),
+        "pilot_symbols": np.stack(pilot_symbols, axis=0),
         "transmitted_labels": np.stack(transmitted_labels, axis=0),
         "transmitted_symbols": np.stack(transmitted_symbols, axis=0),
         "received_symbols": np.stack(received_symbols, axis=0),

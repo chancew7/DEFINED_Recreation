@@ -123,15 +123,12 @@ def experiment_pilot_sweep():
     plot_ser_vs_pilots(pilot_list, ser_list, modulation, snr_db)
 
 def plot_ser_vs_modulation(modulations, ser_list, snr_db, num_pilots):
-    plt.figure()
-    plt.bar(modulations, ser_list)
-    plt.xlabel('Modulation Scheme', fontsize=12)
-    plt.xticks(modulations)
-    plt.ylabel('Symbol Error Rate ($SER$)', fontsize=12)
-    plt.yticks([0, 0.1, 0.2, 0.3])
-    plt.title(f'SER vs. Modulation (k = {num_pilots}, SNR = {snr_db} dB)', fontsize=14)
-    plt.grid()
-
+    fig, ax = plt.subplots()
+    bars = ax.bar(modulations, ser_list)
+    ax.bar_label(bars, padding=3, fmt='%.5f', fontsize=10)
+    ax.set_ylabel('Symbol Error Rate (SER)')
+    ax.set_title('Modulation Comparison (SNR=20dB, Pilots=5)')
+    ax.set_ylim(0, max(ser_list) * 1.2)
 
 def experiment_modulation_comparison():
     print("\n=== SER vs Modulation ===")

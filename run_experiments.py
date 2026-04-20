@@ -3,6 +3,10 @@ import numpy as np
 from channel import generate_block
 from constellations import get_constellation
 from mmse import mmse_estimate, detect_symbol
+from dataset import build_dataset
+from dataloader import create_dataloader
+from model import create_model
+from train import train_model, evaluate_model
 
 
 def compute_ser(num_errors, num_total):
@@ -55,64 +59,89 @@ def run_mmse_experiment(
     return compute_ser(total_errors, total_symbols)
 
 
+def run_transformer_experiment(
+    modulation_name,
+    snr_db,
+    num_blocks,
+    block_length,
+    num_pilots
+):
+
+    X, y = build_dataset(
+        num_blocks=num_blocks,
+        block_length=block_length,
+        modulation_name=modulation_name,
+        snr_db=snr_db,
+        num_pilots=num_pilots
+    )
+
+    loader = create_dataloader(X, y, batch_size=32)
+    model = create_model(modulation_name)
+    train_model(model, loader, num_epochs=15)
+
+    ser = evaluate_model(model, loader)
+
+    return ser
+
+
 def experiment_snr_sweep():
-    print("=== SER vs SNR (MMSE) ===")
+    print("=== SER vs SNR (MMSE vs Transformer) ===")
 
     modulation = "BPSK"
     snr_list = [0, 5, 10, 15, 20]
-    num_pilots = 3
+    k = 3
 
     for snr_db in snr_list:
-        ser = run_mmse_experiment(
-            modulation_name=modulation,
-            snr_db=snr_db,
-            num_blocks=2000,
-            block_length=30,
-            num_pilots=num_pilots
+        mmse_ser = run_mmse_experiment(
+            modulation, snr_db, 1000, 30, k
         )
 
-        print(f"SNR={snr_db} dB, SER={ser:.5f}")
+        transformer_ser = run_transformer_experiment(
+            modulation, snr_db, 1000, 30, k
+        )
+
+        print(f"SNR={snr_db} | MMSE={mmse_ser:.4f} | Transformer={transformer_ser:.4f}")
 
 
 def experiment_pilot_sweep():
-    print("\n=== SER vs Number of Pilots (MMSE) ===")
+    print("\n=== SER vs Pilots (MMSE vs Transformer) ===")
 
     modulation = "BPSK"
     snr_db = 10
     pilot_list = [1, 2, 3, 4, 5]
 
     for k in pilot_list:
-        ser = run_mmse_experiment(
-            modulation_name=modulation,
-            snr_db=snr_db,
-            num_blocks=2000,
-            block_length=30,
-            num_pilots=k
+        mmse_ser = run_mmse_experiment(
+            modulation, snr_db, 1000, 30, k
         )
 
-        print(f"Pilots={k}, SER={ser:.5f}")
+        transformer_ser = run_transformer_experiment(
+            modulation, snr_db, 1000, 30, k
+        )
+
+        print(f"k={k} | MMSE={mmse_ser:.4f} | Transformer={transformer_ser:.4f}")
 
 
-def experiment_modulation_comparison():
+def experiment_modulation():
     print("\n=== SER vs Modulation ===")
 
     snr_db = 10
-    num_pilots = 3
-    modulations = ["BPSK", "QPSK", "16QAM", "64QAM"]
+    k = 3
+    modulations = ["BPSK", "QPSK", "16QAM"]
 
     for mod in modulations:
-        ser = run_mmse_experiment(
-            modulation_name=mod,
-            snr_db=snr_db,
-            num_blocks=2000,
-            block_length=30,
-            num_pilots=num_pilots
+        mmse_ser = run_mmse_experiment(
+            mod, snr_db, 1000, 30, k
         )
 
-        print(f"{mod}, SER={ser:.5f}")
+        transformer_ser = run_transformer_experiment(
+            mod, snr_db, 1000, 30, k
+        )
+
+        print(f"{mod} | MMSE={mmse_ser:.4f} | Transformer={transformer_ser:.4f}")
 
 
 if __name__ == "__main__":
     experiment_snr_sweep()
     experiment_pilot_sweep()
-    experiment_modulation_comparison()
+    experiment_modulation()

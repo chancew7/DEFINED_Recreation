@@ -1,4 +1,5 @@
 import numpy as np
+from channel import generate_block
 
 def build_icl_samples(block, num_pilots):
     
@@ -15,10 +16,10 @@ def build_icl_samples(block, num_pilots):
         sequence = []
 
         for i in range(num_pilots):
-            sequence.append(y[i])
-            sequence.append(x[i])
+            sequence.append((y[i], 0)) 
+            sequence.append((x[i], 1)) 
 
-        sequence.append(y[t])
+        sequence.append((y[t], 0))
 
         inputs.append(np.array(sequence))
         targets.append(labels[t])
@@ -29,12 +30,10 @@ def build_icl_samples(block, num_pilots):
 def complex_to_real(sequence):
     real_sequence = []
 
-    for c in sequence:
-        real_sequence.append([np.real(c), np.imag(c)])
+    for c, token_type in sequence:
+        real_sequence.append([np.real(c), np.imag(c), token_type])
 
     return np.array(real_sequence)
-
-from channel import generate_block
 
 
 def build_dataset(
@@ -44,7 +43,7 @@ def build_dataset(
     snr_db,
     num_pilots
 ):
-    rng = np.random.default_rng()
+    rng = np.random.default_rng(0)
 
     X = []
     y = []
@@ -60,7 +59,12 @@ def build_dataset(
         inputs, targets = build_icl_samples(block, num_pilots)
 
         for seq, label in zip(inputs, targets):
-            X.append(complex_to_real(seq))
+            
+            seq_real = complex_to_real(seq)
+            power = np.mean(seq_real[:, :2] ** 2)
+            seq_real[:, :2] = seq_real[:, :2] / np.sqrt(power + 1e-8)
+            X.append(seq_real)
+
             y.append(label)
 
     return X, y

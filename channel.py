@@ -62,8 +62,10 @@ def generate_dataset(num_blocks: int,
     channel_coefficients = []
     noise_variances = []
 
+    rng = np.random.default_rng(0)
+
     for b in range(num_blocks):
-        block_data = generate_block(block_length, modulation_name, snr_db, np.random.default_rng())
+        block_data = generate_block(block_length, modulation_name, snr_db, rng)
 
         transmitted_labels.append(block_data["transmitted_labels"])
         transmitted_symbols.append(block_data["transmitted_symbols"])

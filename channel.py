@@ -2,20 +2,19 @@ import numpy as np
 from constellations import labels_to_symbols, get_constellation_size
 
 def snr_db_to_noise_variance(snr_db: float) -> float:
-    snr_linear = 10 ** (snr_db / 10.0)
+    snr_linear = 10 ** (snr_db / 10)
     return 1.0 / snr_linear
 
 
-def sample_rayleigh_channel() -> complex:
-    r = np.random.Generator
+def sample_rayleigh_channel(r) -> complex:
     real = r.normal()
     imag = r.normal()
     return (real + 1j * imag) / np.sqrt(2.0)
 
 
 def sample_complex_gaussian_noise(num_samples: int,
-                                  noise_variance: float) -> np.ndarray:
-    r = np.random.Generator
+                                  noise_variance: float,
+                                  r) -> np.ndarray:
     noise_sd = np.sqrt(noise_variance / 2.0)
     real = r.normal(0.0, noise_sd, num_samples)
     imag = r.normal(0.0, noise_sd, num_samples)
@@ -25,9 +24,9 @@ def sample_complex_gaussian_noise(num_samples: int,
 def generate_block(block_length: int,
                     pilot_length: int, 
                     modulation_name: str, 
-                    snr_db: float) -> dict:
+                    snr_db: float,
+                    r) -> dict:
  
-    r = np.random.Generator
     block = {}
 
     constellation_size = get_constellation_size(modulation_name)
@@ -75,7 +74,7 @@ def generate_dataset(num_blocks: int,
     noise_variances = []
 
     for b in range(num_blocks):
-        block_data = generate_block(block_length, pilot_length, modulation_name, snr_db)
+        block_data = generate_block(block_length, modulation_name, snr_db, np.random.default_rng())
 
         pilot.append(block_data["pilot"])
         pilot_symbols.append(block_data["pilot_symbols"])

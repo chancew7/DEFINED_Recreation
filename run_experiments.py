@@ -1,4 +1,5 @@
 import numpy as np
+import matplotlib.pyplot as plt
 
 from channel import generate_block
 from constellations import get_constellation
@@ -58,6 +59,16 @@ def run_mmse_experiment(
 
     return compute_ser(total_errors, total_symbols)
 
+def plot_ser_vs_snr(snr_list, ser_list, modulation, num_pilots):
+    plt.figure()
+    plt.plot(snr_list, ser_list)
+    plt.xlabel('SNR (dB)', fontsize=12)
+    plt.xticks(snr_list)
+    plt.ylabel('Symbol Error Rate ($SER$)', fontsize=12)
+    plt.yticks([0, 0.05, 0.1, 0.15, 0.2])
+    plt.title(f'SER vs. SNR ({modulation}, k = {num_pilots})', fontsize=14)
+    plt.grid()
+
 
 def run_transformer_experiment(
     modulation_name,
@@ -102,13 +113,23 @@ def experiment_snr_sweep():
 
         print(f"SNR={snr_db} | MMSE={mmse_ser:.4f} | Transformer={transformer_ser:.4f}")
 
+def plot_ser_vs_pilots(pilot_list, ser_list, modulation, snr_db):
+    plt.figure()
+    plt.plot(pilot_list, ser_list)
+    plt.xlabel('Number of Pilots ($k$)', fontsize=12)
+    plt.xticks(pilot_list)
+    plt.ylabel('Symbol Error Rate ($SER$)', fontsize=12)
+    plt.yticks([0, 0.05, 0.1, 0.15])
+    plt.title(f'SER vs. Number of Pilots ({modulation}, SNR = {snr_db} dB)', fontsize=14)
+    plt.grid()
 
 def experiment_pilot_sweep():
     print("\n=== SER vs Pilots (MMSE vs Transformer) ===")
 
     modulation = "BPSK"
-    snr_db = 10
+    snr_db = 5
     pilot_list = [1, 2, 3, 4, 5]
+    ser_list = []
 
     for k in pilot_list:
         mmse_ser = run_mmse_experiment(
@@ -121,6 +142,13 @@ def experiment_pilot_sweep():
 
         print(f"k={k} | MMSE={mmse_ser:.4f} | Transformer={transformer_ser:.4f}")
 
+def plot_ser_vs_modulation(modulations, ser_list, snr_db, num_pilots):
+    fig, ax = plt.subplots()
+    bars = ax.bar(modulations, ser_list)
+    ax.bar_label(bars, padding=3, fmt='%.5f', fontsize=10)
+    ax.set_ylabel('Symbol Error Rate (SER)')
+    ax.set_title('Modulation Comparison (SNR=20dB, Pilots=5)')
+    ax.set_ylim(0, max(ser_list) * 1.2)
 
 def experiment_modulation():
     print("\n=== SER vs Modulation ===")

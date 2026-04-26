@@ -4,17 +4,20 @@ from torch.utils.data import DataLoader
 
 
 class ICLDataset(Dataset):
-    def __init__(self, X, y):
+    def __init__(self, y_seqs, x_seqs, labels):
 
-        self.X = X
-        self.y = y
+        self.y_seqs = y_seqs
+        self.x_seqs = x_seqs
+        self.labels = labels
 
     def __len__(self):
-        return len(self.X)
+        return len(self.labels)
 
     def __getitem__(self, idx):
-        return torch.tensor(self.X[idx], dtype=torch.float32), \
-               torch.tensor(self.y[idx], dtype=torch.long)
+        return torch.tensor(self.y_seqs[idx], dtype=torch.float32), \
+               torch.tensor(self.x_seqs[idx], dtype=torch.float32), \
+               torch.tensor(self.labels[idx], dtype=torch.long)
+    
 
 
 def collate_fn(batch):
@@ -41,24 +44,24 @@ def collate_fn(batch):
     return padded_X, y
 
 
-def create_dataloader(X, y, batch_size=32):
-    dataset = ICLDataset(X, y)
+def create_dataloader(y_seqs, x_seqs, labels, batch_size=32):
+    dataset = ICLDataset(y_seqs, x_seqs, labels)
 
     loader = DataLoader(
         dataset,
         batch_size=batch_size,
-        shuffle=True,
-        collate_fn=collate_fn
+        shuffle=True
     )
 
     return loader
 
 
-from dataset import build_dataset
-X, y = build_dataset(20, 30, "BPSK", 10, 3)
-loader = create_dataloader(X, y, batch_size=8)
+# from dataset import build_dataset
+# y, x, labels = build_dataset(20, 30, "BPSK", 10, 3)
+# loader = create_dataloader(y, x, labels, batch_size=8)
 
-for batch_X, batch_y in loader:
-    print(batch_X.shape)  # expect (8, seq_len, 2)
-    print(batch_y.shape)  # expect (8,)
-    break
+# for batch_x, batch_y, labels in loader:
+#     print(batch_x.shape)  # expect (8, seq_len, 2)
+#     print(batch_y.shape)  # expect (8, seq_len, 2)
+#     print(labels.shape)  # expect (8,)
+#     break

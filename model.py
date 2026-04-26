@@ -1,77 +1,65 @@
 import torch
 import torch.nn as nn
 from constellations import get_constellation_size
-import math
+from transformers import GPT2Config, GPT2Model
 
 
 class ICLTransformer(nn.Module):
     def __init__(
         self,
-        input_dim=2,
-        embed_dim=64,
-        num_heads=8,
-        num_layers=4,
-        num_classes=2
+        n_positions, 
+        n_embd, 
+        n_layer, 
+        n_head, 
+        n_classes
     ):
 
         super().__init__()
 
-        self.input_proj = nn.Linear(input_dim, embed_dim)
-        self.positional_encoding = PositionalEncoding(embed_dim)
-
-        encoder_layer = nn.TransformerEncoderLayer(
-            d_model=embed_dim,
-            nhead=num_heads,
-            batch_first=True
+        config = GPT2Config(
+            n_positions=n_positions,
+            n_embd=n_embd,
+            n_layer=n_layer,
+            n_head=n_head,
+            vocab_size=1,
+            use_cache=False,
         )
 
-        self.transformer = nn.TransformerEncoder(
-            encoder_layer,
-            num_layers=num_layers
-        )
-        self.classifier = nn.Linear(embed_dim, num_classes)
+        self.n_classes = n_classes
+        self.read_in = nn.Linear(self.n_classes, n_embd)
+        self.backbone = GPT2Model(config)
+        self.read_out = nn.Linear(n_embd, self.n_classes)
 
-    def forward(self, x):
-        x = self.input_proj(x)
-        x = self.positional_encoding(x)
+    def forward(self, y_batch, x_batch):
+        z_batch = self._interleave(y_batch, x_batch)  # (B, 2T, num_classes)
+        embeds = self.read_in(z_batch)                # (B, 2T, embed_dim)
+        hidden = self.backbone(inputs_embeds=embeds).last_hidden_state
+        logits = self.read_out(hidden)          # (B, 2T, num_classes)
+        return logits[:, ::2, :]
+    
+    def _interleave(self, y_batch, x_batch):
+        batch_size, num_points, num_classes = x_batch.size()
+        _, _, y_classes = y_batch.size()
+
+        if y_classes < num_classes:
+            padding = torch.zeros(batch_size, num_points, num_classes - y_classes, device=y_batch.device,  dtype=y_batch.dtype)
+            y_batch = torch.cat((y_batch, padding), dim=-1)
         
-        seq_len = x.size(1)
-
-        mask = torch.triu(torch.ones(seq_len, seq_len, device=x.device), diagonal=1).bool()
-        x = self.transformer(x, mask=mask)
-        logits = self.classifier(x)   
-
-        return logits
-    
-class PositionalEncoding(nn.Module):
-    def __init__(self, embed_dim, max_len=100):
-        super().__init__()
-
-        pe = torch.zeros(max_len, embed_dim)
-
-        position = torch.arange(0, max_len).unsqueeze(1)
-        div_term = torch.exp(
-            torch.arange(0, embed_dim, 2) * (-math.log(10000.0) / embed_dim)
-        )
-
-        pe[:, 0::2] = torch.sin(position * div_term)
-        pe[:, 1::2] = torch.cos(position * div_term)
-
-        self.register_buffer("pe", pe.unsqueeze(0))
-
-    def forward(self, x):
-        return x + self.pe[:, :x.size(1), :]
+        interleaved = torch.stack((y_batch,x_batch), dim=2)
+        interleaved = interleaved.view(batch_size, 2 * num_points, num_classes)
+        return interleaved
     
 
-def create_model(modulation_name):
+
+def create_model(modulation_name, max_sequence_length=32):
     num_classes = get_constellation_size(modulation_name)
 
     model = ICLTransformer(
-        input_dim=3,
-        embed_dim=64,
-        num_heads=8,
-        num_layers=4,
-        num_classes=num_classes
+        n_positions=2 * max_sequence_length, 
+        n_embd=64, 
+        n_layer=8, 
+        n_head=8, 
+        n_classes=num_classes
     )
 
     return model

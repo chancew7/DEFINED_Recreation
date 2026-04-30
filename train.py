@@ -8,36 +8,6 @@ import numpy as np
 torch.manual_seed(0)
 np.random.seed(0)
 
-def icl_pilot_only_train_step(model, y_batch, x_batch, labels, optimizer, criterion, num_pilots):
-    model.train()
-
-    B, T, C = x_batch.shape
-    total_loss = 0.0
-    num_queries = 0
-
-    for t in range(num_pilots, T):
-        y_prompt = torch.zeros_like(y_batch)
-        x_prompt = torch.zeros_like(x_batch)
-
-        y_prompt[:, :num_pilots, :] = y_batch[:, :num_pilots, :]
-        x_prompt[:, :num_pilots, :] = x_batch[:, :num_pilots, :]
-        y_prompt[:, t, :] = y_batch[:, t, :]
-
-        logits = model(y_prompt, x_prompt)
-        loss_t = criterion(logits[:, t, :], labels[:, t]).mean()
-
-        total_loss += loss_t
-        num_queries += 1
-
-    loss = total_loss / num_queries
-
-    optimizer.zero_grad()
-    loss.backward()
-    optimizer.step()
-
-    return loss.item()
-
-
 def icl_train_step(model, y_batch, x_batch, labels, optimizer, criterion, num_pilots):
     model.train()
 
@@ -218,7 +188,7 @@ def train_icl_model(num_blocks=1000, block_length=31,
             x_batch = x_batch.to(device)
             batch_labels = batch_labels.to(device)
 
-            loss = icl_pilot_only_train_step(
+            loss = icl_train_step(
                 model,
                 y_batch,
                 x_batch,

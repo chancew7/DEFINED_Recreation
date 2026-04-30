@@ -1,6 +1,7 @@
 from pathlib import Path
 
 import matplotlib.pyplot as plt
+from matplotlib.ticker import MaxNLocator
 import numpy as np
 import torch
 
@@ -124,6 +125,14 @@ def save_line_plot(x_values, series, xlabel, ylabel, title, output_name):
 
     for label, y_values in series.items():
         plt.plot(x_values, y_values, marker="o", linewidth=2, label=label)
+
+    ax = plt.gca()
+
+    integer_axis_keywords = ["Pilot", "pilot", "Context", "context"]
+
+    if any(keyword in xlabel for keyword in integer_axis_keywords):
+        ax.xaxis.set_major_locator(MaxNLocator(integer=True))
+        ax.set_xticks(x_values)
 
     plt.xlabel(xlabel)
     plt.ylabel(ylabel)
@@ -276,174 +285,6 @@ def experiment_snr_sensitivity(device):
     )
 
 
-def mmse_ser_by_position(modulation_name, num_pilots, snr_db):
-    rng = np.random.default_rng(TEST_SEED)
-    constellation = get_constellation(modulation_name)
-
-    errors = np.zeros(BLOCK_LENGTH, dtype=np.float64)
-
-    for _ in range(TEST_BLOCKS):
-        block = generate_block(
-            block_length=BLOCK_LENGTH,
-            modulation_name=modulation_name,
-            snr_db=snr_db,
-            r=rng,
-        )
-
-        x = block["transmitted_symbols"]
-        y = block["received_symbols"]
-        labels = block["transmitted_labels"]
-        noise_variance = block["noise_variance"]
-
-        h_hat = mmse_estimate(
-            x[:num_pilots],
-            y[:num_pilots],
-            noise_variance,
-        )
-
-        for t in range(num_pilots, BLOCK_LENGTH):
-            pred_label = detect_symbol(y[t], h_hat, constellation)
-            errors[t] += pred_label != labels[t]
-
-    return errors[num_pilots:] / TEST_BLOCKS
-
-
-def icl_ser_by_position(model, dataloader, num_pilots, device):
-    model.eval()
-
-    position_errors = None
-    total_blocks = 0
-
-    with torch.no_grad():
-        for y_batch, x_batch, labels_batch in dataloader:
-            y_batch = y_batch.to(device)
-            x_batch = x_batch.to(device)
-            labels_batch = labels_batch.to(device)
-
-            batch_size, block_length, _ = x_batch.shape
-
-            if position_errors is None:
-                position_errors = torch.zeros(block_length, device=device)
-
-            for t in range(num_pilots, block_length):
-                y_prompt = torch.zeros_like(y_batch)
-                x_prompt = torch.zeros_like(x_batch)
-
-                y_prompt[:, :num_pilots, :] = y_batch[:, :num_pilots, :]
-                x_prompt[:, :num_pilots, :] = x_batch[:, :num_pilots, :]
-
-                y_prompt[:, t, :] = y_batch[:, t, :]
-
-                logits = model(y_prompt, x_prompt)
-                preds = torch.argmax(logits[:, t, :], dim=-1)
-
-                position_errors[t] += (preds != labels_batch[:, t]).sum()
-
-            total_blocks += batch_size
-
-    return (position_errors[num_pilots:] / total_blocks).cpu().numpy()
-
-
-def defined_ser_by_position(model, dataloader, num_pilots, device):
-    model.eval()
-
-    position_errors = None
-    total_blocks = 0
-
-    with torch.no_grad():
-        for y_batch, x_batch, labels_batch in dataloader:
-            y_batch = y_batch.to(device)
-            x_batch = x_batch.to(device)
-            labels_batch = labels_batch.to(device)
-
-            batch_size, block_length, num_classes = x_batch.shape
-
-            if position_errors is None:
-                position_errors = torch.zeros(block_length, device=device)
-
-            x_feedback = torch.zeros_like(x_batch)
-
-            for t in range(block_length):
-                if t < num_pilots:
-                    x_feedback[:, t, :] = x_batch[:, t, :]
-                else:
-                    logits = model(y_batch, x_feedback)
-                    preds = torch.argmax(logits[:, t, :], dim=-1)
-
-                    x_feedback[:, t, :] = torch.nn.functional.one_hot(
-                        preds,
-                        num_classes=num_classes,
-                    ).float()
-
-                    position_errors[t] += (preds != labels_batch[:, t]).sum()
-
-            total_blocks += batch_size
-
-    return (position_errors[num_pilots:] / total_blocks).cpu().numpy()
-
-
-def experiment_context_position(device):
-    print("\n=== Optional: SER by Context Sequence Length ===")
-
-    modulation_name = "QPSK"
-    num_pilots = 1
-    snr_db = FIXED_SNR_DB
-
-    loader = make_test_loader(
-        modulation_name,
-        num_pilots,
-        snr_db,
-    )
-
-    icl_model = load_trained_model(
-        "icl",
-        modulation_name,
-        num_pilots,
-        device,
-    )
-
-    defined_model = load_trained_model(
-        "defined",
-        modulation_name,
-        num_pilots,
-        device,
-    )
-
-    if icl_model is None or defined_model is None:
-        return
-
-    context_lengths = list(range(num_pilots + 1, BLOCK_LENGTH + 1))
-
-    results = {
-        "MMSE": mmse_ser_by_position(
-            modulation_name,
-            num_pilots,
-            snr_db,
-        ),
-        "ICL": icl_ser_by_position(
-            icl_model,
-            loader,
-            num_pilots,
-            device,
-        ),
-        "DEFINED": defined_ser_by_position(
-            defined_model,
-            loader,
-            num_pilots,
-            device,
-        ),
-    }
-
-    save_line_plot(
-        context_lengths,
-        results,
-        xlabel="Context Sequence Length",
-        ylabel="Symbol Error Rate",
-        title=f"SER by Context Length ({modulation_name}, k={num_pilots}, SNR={snr_db} dB)",
-        output_name="optional_context_sequence_length.png",
-    )
-
-
 def main():
     PLOT_DIR.mkdir(exist_ok=True)
 
@@ -455,7 +296,6 @@ def main():
     experiment_decision_feedback_gain(pilot_results)
     experiment_modulation_complexity(device)
     experiment_snr_sensitivity(device)
-    experiment_context_position(device)
 
 
 if __name__ == "__main__":
